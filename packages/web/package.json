@@ -15,6 +15,7 @@
     "db:generate": "bun --env-file=../../.env drizzle-kit generate",
     "db:migrate": "bun --env-file=../../.env drizzle-kit migrate",
     "db:push": "bun --env-file=../../.env drizzle-kit push",
+    "db:push:ci": "drizzle-kit push --force",
     "db:studio": "bun --env-file=../../.env drizzle-kit studio"
   },
   "dependencies": {
