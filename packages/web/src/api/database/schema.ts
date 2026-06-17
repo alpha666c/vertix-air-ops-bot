@@ -72,3 +72,17 @@ export const processedEvents = sqliteTable("processed_events", {
     .notNull()
     .default(sql`(unixepoch() * 1000)`),
 });
+
+/**
+ * ariaMemory : Aria's durable long-term memory. Facts, decisions, preferences
+ * she chooses to remember across conversations.
+ */
+export const ariaMemory = sqliteTable("aria_memory", {
+  id: text("id").primaryKey(), // nanoid
+  fact: text("fact").notNull(),
+  scope: text("scope"),
+  actor: text("actor"), // who taught her this
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+});

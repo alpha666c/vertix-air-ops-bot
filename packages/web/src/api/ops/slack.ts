@@ -106,6 +106,46 @@ export async function createChannel(name: string, is_private = false) {
   return slackPost("conversations.create", { name, is_private });
 }
 
+/** Recent channel history (not thread) — gives Aria room context. */
+export async function getChannelHistory(channel: string, limit = 20) {
+  const res = await fetch(
+    `${SLACK_API}/conversations.history?channel=${channel}&limit=${limit}`,
+    { headers: { Authorization: `Bearer ${botToken()}` } }
+  );
+  const data = (await res.json()) as {
+    ok: boolean;
+    error?: string;
+    messages?: Array<{ user?: string; bot_id?: string; text?: string; ts?: string }>;
+  };
+  if (!data.ok) console.error("[slack] conversations.history:", data.error);
+  return data.ok ? data.messages ?? [] : [];
+}
+
+/** Open (or fetch) a DM channel with a user, returning its channel id. */
+export async function openDM(userId: string): Promise<string | null> {
+  const data = (await slackPost("conversations.open", { users: userId })) as {
+    ok: boolean;
+    channel?: { id?: string };
+  };
+  return data.ok ? data.channel?.id ?? null : null;
+}
+
+/** DM a user directly (opens the IM if needed). */
+export async function dmUser(userId: string, text: string) {
+  const channel = await openDM(userId);
+  if (!channel) return { ok: false, error: "could not open DM" };
+  return postMessage({ channel, text });
+}
+
+/** Look up a channel's name (for context); falls back to the id. */
+export async function getChannelName(channel: string): Promise<string> {
+  const res = await fetch(`${SLACK_API}/conversations.info?channel=${channel}`, {
+    headers: { Authorization: `Bearer ${botToken()}` },
+  });
+  const data = (await res.json()) as { ok: boolean; channel?: { name?: string } };
+  return data.ok ? data.channel?.name ?? channel : channel;
+}
+
 /** Cache of botUserId so we can ignore our own messages. */
 let _botUserId: string | null = null;
 export async function getBotUserId(): Promise<string | null> {

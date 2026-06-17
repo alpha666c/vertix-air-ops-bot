@@ -72,3 +72,7 @@ scripts/
 !packages/mobile/scripts/
 packages/mobile/scripts/*
 !packages/mobile/scripts/generate-ios-certs.py
+
+# local secret env files (never commit)
+.gh*.env
+.env.dashscope

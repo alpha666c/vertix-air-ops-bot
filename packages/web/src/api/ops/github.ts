@@ -5,11 +5,43 @@
  */
 import { config, mention } from "./config";
 import { postMessage } from "./slack";
+import { ariaSummarizePR } from "./aria";
 import { db } from "../database";
 import { eventLog } from "../database/schema";
 
 const nano = () =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+/* ------------------------------------------------------------------ *
+ *  GitHub REST helper — create an issue (used by Aria's github_issue action).
+ *  Auth via GITHUB_TOKEN (a PAT/installation token set on the server).
+ * ------------------------------------------------------------------ */
+export async function createIssue(
+  repoFullname: string,
+  title: string,
+  body: string
+): Promise<{ html_url?: string; number?: number } | null> {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    console.warn("[github] GITHUB_TOKEN not set — cannot create issue");
+    return null;
+  }
+  const res = await fetch(`https://api.github.com/repos/${repoFullname}/issues`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "aria-vertix-air",
+    },
+    body: JSON.stringify({ title, body }),
+  });
+  if (!res.ok) {
+    console.error("[github] createIssue failed:", res.status, await res.text());
+    return null;
+  }
+  return (await res.json()) as { html_url?: string; number?: number };
+}
 
 /** Verify GitHub webhook HMAC SHA-256 signature (x-hub-signature-256). */
 export async function verifyGithubSignature(
@@ -65,14 +97,26 @@ export async function handleGithubEvent(event: string, payload: GithubReviewPayl
 
   const reviewerName = isCodeRabbit ? config.agents.backend.display : payload.review?.user?.login || "reviewer";
 
+  // Aria writes a short, human take on the review.
+  let ariaNote = "";
+  try {
+    ariaNote = await ariaSummarizePR({
+      title: pr?.title ?? "",
+      body: payload.review?.body ?? "",
+      files: `${repo} #${pr?.number} — ${stateLabel}`,
+    });
+  } catch (e) {
+    console.error("[github] aria PR summary failed:", e);
+  }
+
   const announce =
-    `🔍 *PR review submitted* — ${reviewerName} ${stateLabel} on ` +
-    `<${pr?.html_url}|${repo} #${pr?.number}: ${pr?.title ?? ""}>`;
+    `🔍 *${reviewerName} ${stateLabel}* on <${pr?.html_url}|${repo} #${pr?.number}: ${pr?.title ?? ""}>` +
+    (ariaNote ? `\n${ariaNote}` : "");
 
   // Announce in dev-sync; tag UI to QA if CodeRabbit (backend) reviewed/approved.
   let text = announce;
   if (isCodeRabbit && state === "approved") {
-    text += `\n${mention(config.agents.ui)} backend review is in — please QA the changes against the UI/UX spec and confirm flows + states still hold.`;
+    text += `\n${mention(config.agents.ui)} backend review's in — give it a QA pass against the UI spec and confirm flows + states still hold.`;
   }
 
   await postMessage({ channel: config.devSyncChannelId, text });
