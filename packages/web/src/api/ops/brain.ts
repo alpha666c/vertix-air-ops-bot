@@ -1,16 +1,44 @@
+
 /**
  * The LLM brain. Reads a triggering Slack message + recent thread context
  * and returns a structured orchestration decision.
  */
 import { generateText } from "ai";
 import { createGateway } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 import dedent from "dedent";
 import { config } from "./config";
 
-const gateway = createGateway({
-  baseURL: process.env.AI_GATEWAY_BASE_URL,
-  apiKey: process.env.AI_GATEWAY_API_KEY,
-});
+/**
+ * Model selection is provider-switchable via env (no code change to flip):
+ *   OPS_PROVIDER=dashscope  -> Alibaba Cloud Qwen (DashScope, OpenAI-compatible)
+ *   OPS_PROVIDER=gateway    -> Runable AI Gateway (Claude etc.)  [default]
+ *
+ * DashScope (international) needs:
+ *   DASHSCOPE_API_KEY=sk-...
+ *   OPS_MODEL=qwen-plus            (or qwen-max / qwen-turbo / qwen3-max ...)
+ *   DASHSCOPE_BASE_URL (optional)  defaults to the international endpoint
+ */
+function getModel() {
+  const provider = (process.env.OPS_PROVIDER || "gateway").toLowerCase();
+
+  if (provider === "dashscope" || provider === "alibaba" || provider === "qwen") {
+    const dashscope = createOpenAI({
+      apiKey: process.env.DASHSCOPE_API_KEY,
+      baseURL:
+        process.env.DASHSCOPE_BASE_URL ||
+        "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    });
+    return dashscope(process.env.OPS_MODEL || "qwen-plus");
+  }
+
+  // default: Runable AI Gateway
+  const gateway = createGateway({
+    baseURL: process.env.AI_GATEWAY_BASE_URL,
+    apiKey: process.env.AI_GATEWAY_API_KEY,
+  });
+  return gateway(process.env.OPS_MODEL || config.model);
+}
 
 export type Decision = {
   // primary intent classification
@@ -72,8 +100,12 @@ const SYSTEM = dedent`
     Expected behavior:
     Known gaps:
     Need answer from: @person
-  If a handoff is missing Scope, Expected behavior, or Known gaps → intent=incomplete_handoff
-  and list the missing fields. Nudge politely; do not route the handoff yet.
+  A field counts as PRESENT if the author gave ANY real value for it — do not demand
+  more detail or "better" wording. Only mark intent=incomplete_handoff when a required
+  field is genuinely ABSENT or empty. Required fields: Scope, Expected behavior, Known gaps.
+  ("Need answer from: none" and an empty Files/links are acceptable.) If all required
+  fields are present in any form, treat it as a VALID handoff (intent=handoff) and route it.
+  When incomplete, list only the truly missing fields and nudge politely; do not route yet.
 
   BLOCKERS
   - Any message containing "BLOCKED:" or a hard dependency on a human decision →
@@ -121,7 +153,7 @@ export async function decide(input: {
   `;
 
   const { text } = await generateText({
-    model: gateway(config.model),
+    model: getModel(),
     system: SYSTEM,
     prompt,
     temperature: 0.2,
