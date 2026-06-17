@@ -6,7 +6,7 @@ nixPkgs = ["nodejs_22", "bun"]
 cmds = ["bun install"]
 
 [phases.build]
-cmds = ["bun run build", "cd packages/web && bun run db:push:ci"]
+cmds = ["bun run build"]
 
 [start]
 cmd = "cd packages/web && bun src/server.ts"
