@@ -1,0 +1,21 @@
+[Unit]
+Description=VertiX Air local ops runner
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/opt/vertix-air
+EnvironmentFile=/opt/vertix-air/.env
+Environment=OPS_RUNNER_ROOT=/opt/vertix-air
+Environment=OPS_RUNNER_BIND=127.0.0.1
+Environment=OPS_RUNNER_PORT=8799
+ExecStart=/usr/bin/env python3 /opt/vertix-air/ops-runner/runner.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,92 @@
+version: 1
+name: vertix-air-ops-council
+mission: >
+  Coordinate Vertix Air operational work from Slack, using GitHub as the source
+  of truth and an allowlisted local runner for terminal actions.
+principles:
+  - Slack is the operator interface, not a raw shell.
+  - GitHub is the source of truth for runner code, docs, and workflow contracts.
+  - Terminal access must be allowlisted by command ID.
+  - Mutating operations require explicit human approval.
+  - Secrets must stay in EC2, Slack, n8n, or provider credential stores.
+agents:
+  commander:
+    purpose: Classify requests, choose workflow, ask for missing context, and own the Slack reply.
+    inputs:
+      - Slack message
+      - thread context
+      - repo docs
+      - recent runner output
+    tools:
+      - read GitHub/repo files
+      - call n8n workflow
+      - request approval
+    may_mutate: false
+  operator:
+    purpose: Execute approved allowlisted runner commands and return bounded output.
+    inputs:
+      - commandId
+      - approval state
+    tools:
+      - local ops runner
+    may_mutate: false
+    command_ids:
+      - status
+      - crewai_logs
+      - smoke_crewai
+  analyst:
+    purpose: Explain command results, identify likely causes, and propose next steps.
+    inputs:
+      - runner output
+      - logs
+      - runbooks
+    tools:
+      - read-only repo and log analysis
+    may_mutate: false
+  reviewer:
+    purpose: Block risky actions, require approvals, and check for secret exposure or unsafe shell access.
+    inputs:
+      - proposed action
+      - command risk level
+      - approval state
+    tools:
+      - policy checklist
+    may_mutate: false
+  archivist:
+    purpose: Keep docs, runbooks, and workflow contracts current through GitHub changes.
+    inputs:
+      - accepted decisions
+      - verified setup changes
+      - incident learnings
+    tools:
+      - GitHub branch and PR
+    may_mutate: true
+approval_policy:
+  read_only:
+    examples:
+      - status
+      - crewai_logs
+      - smoke_crewai
+    requires_approval: false
+  mutating:
+    examples:
+      - restart service
+      - deploy update
+      - rotate token
+      - edit production env
+    requires_approval: true
+  forbidden:
+    examples:
+      - arbitrary shell from Slack
+      - printing secrets
+      - public exposure of the runner
+      - destructive filesystem or database actions without a runbook
+    requires_approval: unavailable
+observability:
+  required_outputs:
+    - action requested
+    - commandId executed
+    - approval state
+    - return code
+    - bounded stdout/stderr summary
+    - next step

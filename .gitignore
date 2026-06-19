@@ -32,6 +32,8 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # caches
 .eslintcache
 .cache
+__pycache__/
+*.py[cod]
 *.tsbuildinfo
 .turbo
 

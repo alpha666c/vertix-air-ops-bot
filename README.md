@@ -1,6 +1,6 @@
 # Vertix Air — Ops Orchestrator Bot
 
-LLM-powered Slack orchestrator that acts as the brain behind the **Vertix Air operations** Slack app (`A0BATSMGQF3`). It referees the two worker agents (UI/UX = Runable, Backend/QA = CodeRabbit) so handoffs, QA gates, and blockers run themselves.
+LLM-powered Slack orchestrator that acts as the brain behind the **Vertix Air operations** Slack app (`A0BATSMGQF3`). It coordinates handoffs, blockers, status, and the first safe terminal bridge for the Vertix Air EC2 host.
 
 ## What it does
 
@@ -11,10 +11,25 @@ LLM-powered Slack orchestrator that acts as the brain behind the **Vertix Air op
 - **Mirrors decisions** to `#vertix-ops-log`.
 - **Tracks task status** (open / in_progress / in_review / blocked / done) and posts a board summary.
 - **GitHub tie-in** — announces CodeRabbit PR reviews in Slack and tags UI to QA on approval.
+- **Local ops runner** — exposes allowlisted EC2 command IDs for n8n/Slack workflows without giving agents a raw shell.
 
 ## Stack
 
 Bun + Hono (API) + Drizzle/SQLite (state) + AI Gateway (`generateText`). Backend-only — Slack is the UI.
+
+## Current ops setup path
+
+Use these docs for the EC2/n8n/CrewAI setup:
+
+| Path | Purpose |
+|------|---------|
+| `docs/sitrep.md` | Current situation, what failed, and the recommended next move. |
+| `docs/architecture.md` | Slack -> bot -> n8n -> local runner architecture and council model. |
+| `docs/runbook.md` | Step-by-step EC2 setup and smoke tests. |
+| `ops-runner/` | Token-protected allowlisted local command runner. |
+| `orchestra/` | Agent council roles and approval policy. |
+| `n8n/workflows/` | Workflow contract for Slack/n8n runner calls. |
+| `infra/ec2/` | EC2 deployment and networking notes. |
 
 ## Architecture
 
@@ -44,6 +59,8 @@ GitHub PR review ─► /api/github/webhook ─► verify sig ─► announce + 
 | `packages/web/src/api/ops/orchestrator.ts` | Ties brain+slack+db, executes decisions |
 | `packages/web/src/api/ops/github.ts` | PR review handling |
 | `packages/web/src/api/database/schema.ts` | tasks / handoffs / event_log / processed_events |
+| `ops-runner/runner.py` | Local allowlisted terminal runner for EC2 |
+| `orchestra/council.yaml` | Agent council contract |
 
 ## Endpoints
 
@@ -74,6 +91,13 @@ SLACK_AGENT_BACKEND_USER_ID=               # CodeRabbit bot member id
 GITHUB_WEBHOOK_SECRET=
 
 OPS_MODEL=anthropic/claude-sonnet-4.6
+
+# Local EC2 ops runner
+OPS_RUNNER_ROOT=/opt/vertix-air
+OPS_RUNNER_BIND=127.0.0.1
+OPS_RUNNER_PORT=8799
+OPS_RUNNER_TOKEN=
+OPS_RUNNER_TIMEOUT=60
 ```
 
 ## Slack app setup (A0BATSMGQF3)
